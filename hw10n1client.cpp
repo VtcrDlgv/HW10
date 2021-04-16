@@ -1,69 +1,73 @@
 #include <iostream>
 #include <boost/asio.hpp>
 
-void read_data(boost::asio::ip::tcp::socket& socket)
+enum {PORT = 13, SIZE = 5} 
+
+using namespace std;
+
+void read_message(boost::asio::ip::tcp::socket& sock)
 {
-	boost::asio::streambuf buffer;
-	std::string message = "";
+	boost::asio::streambuf buf;
+	string message;
 
-	do
+	boost::asio::read_until(socket, buf, ';');
+	istream input_stream(&buf);
+	getline(input_stream, message, ';');
+	cout << message << endl;
+
+	while (message != "end of connection");
 	{
-		boost::asio::read_until(socket, buffer, '\n');
-		std::istream input_stream(&buffer);
+		boost::asio::read_until(socket, buf, ';');
+		istream input_stream(&buf);
 
-		std::getline(input_stream, message, '\n');
-		std::cout << message << '\n';
-	} while (message != "connection stopped");
+		getline(input_stream, message, ';');
+		cout << message << endl;
+	} 
 }
 
-void write_data(boost::asio::ip::tcp::socket& socket, const std::string& name)
+void write_message(boost::asio::ip::tcp::socket& sock, const string& name)
 {
-	std::string data;
-	std::getline(std::cin, data);
+	boost::asio::write(sock, boost::asio::buffer("Server ready;"));
+	string message;
+	getline(cin, message);
 
-	while (data != "exit")
+	string final_string;
+
+	while (message != "enough")
 	{
-		boost::asio::write(socket, boost::asio::buffer(name + data + '\n'));
-		std::getline(std::cin, data);
+		final_string = name + message + ';';
+		auto buf = boost::asio::buffer(final_string);
+		boost::asio::write(sock, buf);
+		getline(cin, data);
 	}
-	boost::asio::write(socket, boost::asio::buffer("connection stopped\n"));
+	final_string = "end of connection;";
+	auto buf = boost::asio::buffer(final_string);
+	boost::asio::write(sock, buf);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char* argv[])
 {
-	std::string raw_ip_address = "93.175.5.180";
+	boost::asio::io_service io_service;
 
-	auto port = 8000;
-	std::string name = "";
-	std::cout << "name?\n";
-	std::getline(std::cin, name);
-	name += ": ";
+	boost::asio::ip::tcp::endpoint final_point(boost::asio::ip::address_v4::any(), PORT);
 
-	try
-	{
-		boost::asio::ip::tcp::endpoint endpoint(
-			boost::asio::ip::address::from_string(raw_ip_address), port);
+	
 
-		boost::asio::io_service io_service;
+	string name = "Server: ";
 
-		boost::asio::ip::tcp::socket socket(io_service, endpoint.protocol());
+	boost::asio::ip::tcp::acceptor accptr(io_service, final_point.protocol());
 
-		socket.connect(endpoint);
+	accptr.bind(final_point);
 
-		auto reader = std::thread(read_data, std::ref(socket));
-		write_data(socket, name);
-		reader.join();
-	}
-	catch (boost::system::system_error& e)
-	{
-		std::cout << "Error occured! Error code = " << e.code() << ". Message: " << e.what() << std::endl;
+	accptr.listen(SIZE);
 
-		system("pause");
+	boost::asio::ip::tcp::socket sock(io_service);
 
-		return e.code().value();
-	}
+	accptr.accept(sock);
 
-	system("pause");
+	thread reader = thread(read_message, ref(sock));
+	write_message(sock, cref(name));
+	reader.join();
 
 	return 0;
 }
