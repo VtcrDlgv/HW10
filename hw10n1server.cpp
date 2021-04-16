@@ -68,8 +68,6 @@ int main(int argc, char* argv[])
 	thread reader = thread(read_message, ref(sock));
 	write_message(sock, cref(name));
 	reader.join();
-
-	//system("pause");
-
+	
 	return 0;
 }
